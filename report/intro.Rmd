@@ -1,0 +1,34 @@
+# Introduction
+
+```{r, echo = FALSE, message = FALSE}
+source(here::here("scripts/setup.R"))
+```
+
+
+### Overview and Motivation
+
+In political literature, democracy is considered the most reliable and fair regime in the eyes of citizens. There are several forms of democracy in our World and they all adapt to the country’s socio-demographic, physiologic and cultural values. For this reason, it is impossible to give a unique definition of what the word “democracy” means. However, what we know is that it is a form of government in which the people have the authority to choose their governing legislation. 
+  
+  The opposite of this form of government is the autocratic regime. In that case, government rules do not allow people to participate directly in the governing process. The power is held by one single entity or by a minority group. We will not go into details which regime is the best for the behalf of the country, but we will focus more on how countries with more or less democracy level react to Covid-19 pandemic.  
+  
+### Related Work
+
+The article published by Lin (2015) “Governing Natural Disaster: State Capacity, Democracy and Human Vulnerability” states that democracy is better on dealing with crisis rather than autocracy since they have a more transparent social institution, which usually ensures more trust between people and government. 
+  
+  Another article published by “Strategic Communication department of the European External Action Service” focuses on the pandemic effects on democracy evolution. It highlights the fact that measures taken for Covid-19 might harm countries democracy level since restrictions are considered as a limitation of people freedom. An exciting point reported in this paper is the fact that autocratic countries, on average, have achieved better results in term of restriction policies. This is exactly what we are going to verify with this research.
+  
+### Research questions
+
+As we all know, Covid-19 has become much more than a health problem. Fighting the pandemic, the majority of countries are facing pressure in the health sector but, at the same time, they all need to deal with their economic and socio-cultural capability under their government rules. In our work, we are interested in analysing how countries with different  government regime behave during the fight against Covid-19 and how restrictions differ between those countries. 
+We aim to evaluate the validity of the political theory stating that the democracy is the best regime to deal with the crisis.
+
+  Our research is a comparative analysis of European countries where we are going to compare restriction policies between European countries with different degrees of democracy. 
+
+More precisely, we are trying to answer the following questions:
+  
+  1. How different is the mortality rate between countries with high and low democracy level?
+  2. How severe those countries are in term of movement restrictions? With focus on stay-home and public gathering restriction.
+  3. What about the right to health? How testing policies and contact tracing differ between different level of democracy?
+  4. Is it true that countries with the highest democracy level achieve better results, in term of people infected, through restriction? 
+  
+  

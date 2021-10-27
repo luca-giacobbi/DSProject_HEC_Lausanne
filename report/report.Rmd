@@ -1,0 +1,15 @@
+---
+title: "COMPARISON OF COVID-19 RESTRICTIONS ACROSS EUROPEAN DEMOCRACIES <br>"
+author: "Luca Giacobbi and Özgür Aydemir"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+<style>
+body {
+text-align: justify}
+</style>
+
+```{r child = c('intro.Rmd', 'data.Rmd', 'eda.Rmd', 'analysis.Rmd', 'concl.Rmd')}
+```
+
+

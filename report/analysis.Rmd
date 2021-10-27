@@ -1,0 +1,916 @@
+# Analysis
+
+```{r, echo = FALSE, message = FALSE}
+source(here::here("scripts/setup.R"))
+```
+
+## Mortality rate 
+
+We belive that countries with a high level of democracy might find harder to apply restrictions rather than countries with a low level of democracy. 
+In democracy, citizens have the right to participate, directly or indirectly, in governing the country's rules. However, when the government impose a restriction to fight the spread of the virus, it happened, in some countries, that people felt their rights violated because the decision did not come from them (riots around Europe).
+
+The first information we are going to analyze is the difference in mortality rate between countries with high democracy level and low democracy level in order to identify which countries are the most affected by the pandemic.
+
+The democracy index used in this work is "Liberal Democracy Index" since this variable seems to be the most appropriate one for our project. It measures the civil liberties and minority rights against the "tyranny of the state". In an environment where strict rules are implemented to restrict people's liberties, we consider this index, rather than the electoral one, more accurate.
+
+Looking at the democracy graph in the previous section, we identified two clusters. We will name them group 1 for countries with a high level of democracy (greater than 0.69), and group 2 those with low level of democracy (lower than 0.55).
+We have 65% of observation in Group 1 and 35% in group 2.
+To keep our visuals more precise, we are going to focus on the ten countries with the highest and the ten with the lowest index.
+
+```{r}
+democracy <- democracy %>%
+  filter(country %in% countries.list)
+
+dem.tophigh.lib <- democracy %>% arrange(desc(v2x_libdem)) 
+dem.tophigh.lib <- dem.tophigh.lib[1:10,] %>% select(country,v2x_libdem)
+dem.toplow.lib <- democracy %>% arrange(v2x_libdem) 
+dem.toplow.lib <- dem.toplow.lib[1:10,] %>% select(country,v2x_libdem)
+countries.top.dem <- c(dem.tophigh.lib$country,dem.toplow.lib$country)
+
+dem.tophighlow.lib <- democracy %>%
+  filter(country %in% countries.top.dem) %>%
+  select(country,dem.idx=v2x_libdem) %>%
+  arrange(desc(dem.idx))
+```
+
+```{r}
+kbl(
+  tibble(
+    'Top Countries' = dem.tophigh.lib$country,
+    "TDem. index " = dem.tophigh.lib$v2x_libdem,
+    'Low Countries' = dem.toplow.lib$country,
+    "LDem. index" = dem.toplow.lib$v2x_libdem
+  ),
+  caption = "**Table 11**: Countries with highest and countries with lowest level of electoral democracy.",
+  align = c("lclc")
+) %>%
+  kable_classic(full_width = T, html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'),table.envir = "table") %>%
+  column_spec(c(1,3), width = "8cm")
+```
+
+
+Now, we are going to visualize the mortality rate, for the last available date *"2020-11-05"*  in those two groups of countries, to see if we can observe any correlation between mortality rate and democracy level.
+
+```{r}
+
+toplow.dem.mort <- covid_data %>%
+  filter(country %in% countries.top.dem,date == "2020-11-05") %>%
+  mutate(country = reorder(country, mort_rate)) %>%
+  select(country,mort_rate) %>% 
+  inner_join(dem.tophighlow.lib,by='country')%>% 
+  mutate(country = reorder(country, mort_rate))
+```
+
+```{r}
+for(i in 1: nrow(toplow.dem.mort)){
+  toplow.dem.mort[i,4] <- ifelse(toplow.dem.mort$dem.idx[i]<0.65,'Low','Top')
+}
+
+toplow.dem.mort <- toplow.dem.mort %>% rename(lev.democracy=...4)
+mean.mort.highdem <- mean(toplow.dem.mort[toplow.dem.mort$lev.democracy=="Low",]$mort_rate)
+mean.mort.lowdem <- mean(toplow.dem.mort[toplow.dem.mort$lev.democracy=="Top",]$mort_rate)
+kbl(tibble(
+  'High Democracy'=mean.mort.highdem,
+  'Low Democracy'=mean.mort.lowdem
+),
+  caption = "**Average mortality rate in countries with highest and countries with lowest level of electoral democracy.**",
+  align = c("cc")
+) %>%
+  kable_classic(full_width = T, html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'),table.envir = "table")
+
+```
+
+```{r}
+#graph 9
+plot1 <- toplow.dem.mort[toplow.dem.mort$lev.democracy=='Top',] %>% ggplot()+
+  geom_bar(aes(x = mort_rate, y= country),fill = '#56B1F7' , 
+           stat = "identity")+
+  geom_text(aes(x = mort_rate, y = country, label = paste(round(mort_rate, digits = 2),"%")),
+            hjust = 1.15,color='white')+
+  ylab("High Democracy level")+
+  xlab("") +
+  xlim(c(0,5))
+
+plot2 <- toplow.dem.mort[toplow.dem.mort$lev.democracy=='Low',] %>% ggplot()+
+  geom_bar(aes(x = mort_rate, y= country),fill = '#FF0000', 
+           stat = "identity")+
+  geom_text(aes(x = mort_rate, y = country, label = paste(round(mort_rate, digits = 2),"%")),
+            hjust = 1.15,color='white')+
+  ylab("Low democracy level")+
+  xlab("") +
+  xlim(c(0,5))
+
+ggarrange(plot1,plot2,nrow = 2,align = 'v') %>%
+  annotate_figure(top = text_grob("MORTALITY RATE FOR COUNTRIES WITH HIGH AND LOW DEMOCRACY LEVEL", 
+                                  size = 12),
+                  bottom = text_grob("Democracy level"))
+```
+
+Our results are not giving a clear answer about the correlation between the two variables.  
+As we can see from the average mortality rate, the two groups are showing similar results. In both cases we found that at least 50% of the countries considered are suffering two deaths every 100 people infected. 
+Sweden is the only country showing a rate above 4%, followed by Kosovo and Irland, where the fatality is slightly more than 3%.
+  
+  Overall, we did not find any pattern suggesting a link between mortality rate and level of democracy. So, as we were not entirely convinced with those results, we tried to reformulate our question.
+  
+***How democracy level change between countries with high and low mortality rate?***
+  
+To answer the previous question, we selected the countries with the highest and the lowest democracy level,now, we are going to proceed the same way as for mortality rate.
+
+```{r}
+#Mortality rate registered on "2020-11-05" in European countries.
+mortality <- covid_data %>%
+  filter(country %in% countries.list,
+         date == "2020-11-05") %>%
+  select(country,mort_rate) %>%
+  arrange(mort_rate)
+
+countries.tophigh.mort <- mortality %>%
+  filter(mort_rate > quantile(mort_rate,0.75)) %>%
+  select(country)
+
+countries.toplow.mort <- mortality %>%
+  filter(mort_rate < quantile(mort_rate,0.25)) %>%
+  select(country)
+
+countries.top.mort <- c(pull(countries.tophigh.mort),pull(countries.toplow.mort)) 
+```
+
+```{r}
+mort.level <- mortality %>%
+  filter(country %in% countries.top.mort)
+
+mort.high <- mort.level %>% arrange(desc(mort_rate)) 
+mort.high <- mort.high[1:10,] 
+
+mort.low <- mort.level %>% arrange(mort_rate) 
+mort.low <- mort.low[1:10,] 
+
+```
+
+```{r}
+kbl(
+  tibble(
+    'Top Countries' = mort.high$country,
+    "Mortality Rate " = mort.high$mort_rate,
+    'Low Countries' = mort.low$country,
+    "Mortality Rate" = mort.low$mort_rate
+  ),
+  caption = "**Table 12**: Countries with highest and lowest level of mortality rate.",
+  align = c("lclc")
+) %>%
+  kable_classic(full_width = T, html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'))%>%
+  column_spec(c(1,3), width = "8cm")
+```
+
+  
+  In the following graph, we are going to see the level of democracy in those two groups of countries to see if we can manage to retrieve useful information to understand whether democratic countries register higher or lower mortality rate compared to "autocratic" countries.
+
+```{r}
+toplow.dem.mort.alt <- democracy %>%
+  filter(country %in% countries.top.mort) %>%
+  mutate(country = reorder(country, v2x_libdem)) %>%
+  select(country,v2x_libdem) %>% 
+  inner_join(mort.level,by='country')%>% 
+  mutate(country = reorder(country, v2x_libdem))
+```
+
+```{r}
+#graph 10
+
+plot3 <- toplow.dem.mort.alt %>% filter(country%in% mort.high$country) %>% ggplot() +
+  geom_bar(aes(x = v2x_libdem, y = country), fill = 'orangered',
+           stat = "identity") +
+  geom_text(aes(
+    x = v2x_libdem,
+    y = country,
+    label = paste(round(v2x_libdem, digits = 2))
+  ),
+  hjust = 1.15,
+  color = 'white') +
+  ylab("High mortality rate")+
+  xlab("") +
+  xlim(c(0,1))
+
+plot4 <- toplow.dem.mort.alt %>% filter(country%in% mort.low$country) %>% ggplot() +
+  geom_bar(aes(x = v2x_libdem, y = country), fill = 'olivedrab',
+           stat = "identity") +
+  geom_text(aes(
+    x = v2x_libdem,
+    y = country,
+    label = paste(round(v2x_libdem, digits = 2))
+  ),
+  hjust = 1.15,
+  color = 'white') +
+  ylab("Low mortality rate")+
+  xlab("") +
+  xlim(c(0,1))
+
+ggarrange(plot3,plot4, align='v' ,nrow = 2) %>%
+  annotate_figure(top = text_grob("DEMOCRACY LEVEL FOR COUNTRIES WITH HIGH AND LOW MORTALITY RATE", 
+                                  size = 12),
+                  bottom = text_grob("Democracy level"))
+
+```
+
+In this case, we can see a clear difference between democratic and non democratic countries. As we can see, both groups, high and low mortality rate can be observed in both countries regardless of their level of democracy. In the first one, we see that 7 countries out of 10 have a high democracy level. Therefore, in the second group (low mortality rate), this proportion is even higher; 8 countries out of 10 have a democracy level above 0.7. 
+  
+So, to answer our first research question, we can say that there are not significant differences in mortality rates between democratic and non democratic countries. Although, countries with high level of liberal democracy are the one showing both highest and lowest mortality rate and, for this reason, we cannot define a relevant connection between the two variables.
+  
+  
+## Democracy and restrictions
+
+In this section, we will focus on the relationship between countries' level of stringency
+and their democracy degree. 
+We will try to understand whether countries with a high level of democracy are setting lower pressure than the less democratic ones. 
+In order to measure that, we will follow the same process as we did before,  classifying countries in two groups, high and low level of liberal democracy.
+
+Stringency index goes from 0 to 100, with 0 representing no restriction at all and 100 all restriction applied. In order to facilitate the understanding of our graph, we have classified the stringency index into five levels. Each level represents one range of stringency such that level 1 include values between 0 and 20, level 2 20 to 40 and so on. 
+In this case, we want to identify which countries reached the last class (level 5).
+We added a dashed line to highlight the time frame for which those countries have been keeping such stringency and we reported the number of days on the side.
+
+```{r,warning=FALSE}
+# Rank the stringency level from 1 to 5
+stringency.class <- stringency
+stringency.class[stringency.class['stringency_idx'] < 20, 'stringency_idx'] <-  1
+stringency.class[stringency.class['stringency_idx'] > 20 & stringency.class['stringency_idx'] < 40 , 'stringency_idx'] <-  2
+stringency.class[stringency.class['stringency_idx'] > 40 & stringency.class['stringency_idx'] < 60 , 'stringency_idx'] <-  3
+stringency.class[stringency.class['stringency_idx'] > 60 & stringency.class['stringency_idx'] < 80 , 'stringency_idx'] <-  4
+stringency.class[stringency.class['stringency_idx'] > 80 & stringency.class['stringency_idx'] <= 100 , 'stringency_idx'] <-  5
+```
+
+```{r,warning=FALSE}
+#Top High countries
+
+stringency.class <- stringency.class %>% filter(country %in% countries.top.dem)
+
+stringency.class.wide <- stringency.class %>% pivot_wider(id_cols = date,names_from=country,values_from=stringency_idx)
+stringency.dates <- count.leveldays(stringency.class.wide)
+stringency.dates <-  stringency.dates %>% mutate(length.class=as.numeric(date_end-date_start))
+
+
+stringency.lev.index.total <- left_join(stringency.class, stringency, by = c("date","country"))%>%
+  rename(c("Stringency_Index" = stringency_idx.y,
+           "Stringency_Level" = stringency_idx.x))
+
+```
+
+```{r,fig.asp= 0.9, fig.align=6}
+stringency.high.dem <- stringency.lev.index.total %>%
+  filter(country %in% dem.tophigh.lib$country)
+
+dates.highdem <- stringency.dates %>%
+  filter(country %in% dem.tophigh.lib$country, lv == "5")
+
+plot.stringency.highdem <- stringency.high.dem %>%
+  ggplot(aes(x= date, y = Stringency_Index ))+
+  geom_line(aes(color = Stringency_Level), size = 0.9)+
+  scale_color_gradient2(low = "yellow",mid = "darkblue", high = "red")+
+  facet_wrap(.~country,nrow=2,ncol=5)+
+  theme_bw()+
+  geom_text(data = dates.highdem,
+            aes(x= date_start, y = 0,label = length.class),hjust = 1.3,nudge_y = 90,size=3)+
+  geom_vline(data = dates.highdem,
+             aes(xintercept = as.numeric(date_start)),
+             linetype = "longdash", size = 0.5)+
+  geom_vline(data = dates.highdem,
+             aes(xintercept = as.numeric(date_end)),color = "navyblue",
+             linetype = "longdash", size = 0.5)+
+  scale_x_date(date_breaks = "1 month",
+               position = "bottom", 
+               labels = date_format("%b"))+
+  theme(axis.text.x.bottom = element_text(angle = 90))+
+  xlab("")+
+  ylab("high democracy level")+ 
+  ylim(c(0,100))+
+  theme(strip.background = element_rect(fill="#ADD8E6"))
+```
+
+```{r,fig.asp= 0.9, fig.align=6}
+#Top Low countries
+
+stringency.low.dem <- stringency.lev.index.total %>%
+  filter(country %in% dem.toplow.lib$country )
+
+dates.lowdem <- stringency.dates %>%
+  filter(country %in% dem.toplow.lib$country, lv == "5")
+
+
+plot.stringency.lowdem <-stringency.low.dem %>%
+  ggplot(aes(x= date, y = Stringency_Index ))+
+  geom_line(aes(color = Stringency_Level), size = 0.9)+
+  scale_color_gradient2(low = "yellow",mid = "darkblue", high = "red")+
+  facet_wrap(.~country,nrow = 2,ncol=5)+
+  theme_bw()+
+  geom_text(data = dates.lowdem,
+            aes(x= date_start, y = 0,label = length.class),hjust = 1.3,nudge_y = 90,size=3)+
+  geom_vline(data = dates.lowdem,
+             aes(xintercept = as.numeric(date_start)),
+             linetype = "longdash", size = 0.5)+
+  geom_vline(data = dates.lowdem,
+             aes(xintercept = as.numeric(date_end)),color = "navyblue",
+             linetype = "longdash", size = 0.5)+
+  scale_x_date(date_breaks = "1 month",
+               position = "bottom", 
+               labels = date_format("%b")) +
+  theme(axis.text.x.bottom = element_text(angle = 90)) +
+  xlab("")+
+  ylab("Low democracy level")+ 
+  ylim(c(0,100))+
+  theme(strip.background = element_rect(fill="#FFCCCB"))
+```
+
+```{r,fig.asp= 0.9, fig.align=6}
+#Plot together graph 11
+ggarrange(plot.stringency.highdem,plot.stringency.lowdem,
+          common.legend = T,nrow = 2,legend = "bottom",align = 'v',vjust = 2) %>%
+  annotate_figure(top = text_grob("GOVERNMENT STRINGENCY FOR EUROPE COUNTRIES", 
+                                  size = 12))
+```
+
+
+We notice, for our highly democratic group of countries, that only four of them have applied the highest level of stringency. These are  "Belgium, Ireland, Portugal and Spain". In the other groups, we have eight countries that achieved that level. These countries are "Albania, Belarus, Bosnia, Kosovo, Moldova, Romania, Russia, Serbia, Ukraine". 
+
+As a result, we observe that not only less democratic countries have been more severe in term of applying restrictions rules but also, on average, they have lasted much longer than the more democratic ones.
+
+However, it is still hard to assume a correlation between democracy and the level of stringency.They may have more strict rules because they have registered a higher number of cases than more democratic countries. 
+
+For this reason, in the next step, we will observe the evolution of the number of cases per 100.000 people through time by comparing to the evolution of stringency rules. 
+
+```{r}
+
+# Split top.high and top.low countries
+str.lowdem <- stringency.dates %>%
+  filter(country %in% dem.toplow.lib$country)
+
+str.lowdem1 <- str.lowdem %>% 
+  filter(lv == "5")
+
+str.highdem <- stringency.dates %>%
+  filter(country %in% dem.tophigh.lib$country)
+
+str.highdem1 <- str.highdem %>% 
+  filter(lv == "5")
+```
+
+```{r}
+# HIGH DEM CASES PER 100K
+
+cases100.higdem <- covid_data %>%
+  select(date, country, cases_per100k) %>%
+  filter(country %in%  dem.tophigh.lib$country )
+
+str.highdem1 <- inner_join(str.highdem1,cases100.higdem,by=c('country',"date_start"='date'))
+str.highdem1 <- inner_join(str.highdem1,cases100.higdem,by=c('country',"date_end"='date'))
+
+plot.highdemcases100 <- cases100.higdem %>% ggplot() +
+  geom_line(aes(x = date,y = cases_per100k))+
+  geom_rect(aes(xmin= date_start, xmax = date_end,
+                fill=lv),
+            ymin = -Inf, ymax = Inf,alpha = 0.5,
+            data = str.highdem)+
+  scale_fill_gradient(
+    low = "#008000",#green
+    high = "#FF0000",#red
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill"
+  )+
+  facet_wrap(~country, scales = "fixed",nrow = 2, ncol = 5)+
+  xlab("")+
+  ylab("High democracy level")+ 
+  geom_text(data = str.highdem1,
+            aes(x= date_end, y = cases_per100k.y ,label = length.class),hjust = 1.2,vjust=-1)+
+  geom_point(data = str.highdem1, aes(x = date_start, y = cases_per100k.x))+
+  geom_point(data = str.highdem1, aes(x = date_end, y = cases_per100k.y))
+
+```
+
+```{r}
+## Low dem cases 100k 
+
+cases100.lowdem <- covid_data %>%
+  select(date, country, cases_per100k) %>%
+  filter(country %in%  dem.toplow.lib$country )
+
+str.lowdem1 <- inner_join(str.lowdem1,cases100.lowdem,by=c('country',"date_start"='date'))
+str.lowdem1 <- inner_join(str.lowdem1,cases100.lowdem,by=c('country',"date_end"='date'))
+
+plot.lowdemcases100 <- cases100.lowdem %>% ggplot() +
+  geom_line(aes(x = date,y = cases_per100k))+
+  geom_rect(aes(xmin= date_start, xmax = date_end,
+                fill=lv),
+            ymin = -Inf, ymax = Inf,alpha = 0.5,
+            data = str.lowdem)+
+  scale_fill_gradient(
+    low = "#008000",#green
+    high = "#FF0000",#red
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill"
+  )+
+  facet_wrap(~country, scales = "fixed",nrow = 2, ncol = 5)+
+  ylim(c(0,4000))+
+  xlab("")+
+  ylab("Low democracy level")+ 
+  geom_text(data = str.lowdem1,
+            aes(x= date_end, y = cases_per100k.y  ,label = length.class),hjust = 1.2,vjust=-1)+
+  geom_point(data = str.lowdem1, aes(x = date_start, y = cases_per100k.x))+
+  geom_point(data = str.lowdem1, aes(x = date_end, y = cases_per100k.y))
+```
+
+```{r,fig.asp= 0.9, fig.align=6}
+#graph 12
+
+ggarrange(plot.highdemcases100,plot.lowdemcases100,
+          common.legend = T,nrow = 2,legend = "bottom",align = 'v',vjust = 2) %>%
+  annotate_figure(top = text_grob("EVOLUTION OF CASES PER 100000 PEOPLE WITH DIFFERENT LEVEL OF STRINGENCY", 
+                                  size = 12),
+                  bottom = text_grob("Date"))
+```
+
+This graph provides us with exciting results. Firstly, it allows us to visualize the situation of covid-19 cases per 100.000 people in the two groups of countries. Since the highest levels of stringency were registered at the beginning of 2020, we will mostly focus on that period.
+
+To begin with analysis, we start from the fact that in countries where the level of democracy is high, we have two different situations. Norway, Denmark, Estonia and Finland show a flat line and consequently have been less strict in terms of restrictions and, as it is shown, their level of stringency never went over 80 (lv.5 in this graph). 
+On the other hand, Sweden and Switzerland have suffered an increase of cases in April, but still maintained a low level of stringency. 
+As we have seen before, Sweden is now showing the highest mortality rate. This bring us to conclusion that their decision not to impose restrictions as the other countries did, was not a feasible one.
+
+In contrast, we see that countries with a low level of democracy have been stricter in terms of restrictions and with the exception of Belarus and Hungary, they have all imposed severe policies to fight the pandemic. This is true even if the number of cases, in those countries, was not as high as in Spain, Portugal, Belgium, or Ireland. 
+
+Furthermore, it is clear that in this group of countries the high level of stringency seems to last longer, for an average of 66 days, compared to only 52 in the high democracy group.
+
+These results drive us to a conclusion that less democratic countries are setting severer stringency levels that last longer than the ones in countries with stronger democracies.
+
+We now want to verify if such conclusion can be applied in more detail for movement restrictions.
+
+### MOVEMENT RESTRICTIONS
+
+**STAY HOME**
+```{r}
+stay_home.top <- stay_home %>%
+  select(date, all_of(countries.top.dem))
+
+
+stay_home.dates <- count.leveldays(stay_home.top) %>%
+  filter(date_start <= as.Date('2020-11-04')) %>%
+  mutate(
+    date_end = replace(
+      date_end,
+      date_end > as.Date('2020-11-04'),
+      as.Date('2020-11-05')
+    ),
+    length.class = as.numeric(date_end - date_start)
+  )
+
+
+stay_home.dates <-
+  add_column(stay_home.dates, growth = rep(0, nrow(stay_home.dates)))
+
+for (i in 1:nrow(stay_home.dates)) {
+  c <- pull(stay_home.dates[i, 1])
+  ds <- pull(stay_home.dates[i, 3])
+  de <- pull(stay_home.dates[i, 4])
+  tcs <-
+    covid_data$total_cases[covid_data$country == c &
+                             covid_data$date == ds]
+  tce <-
+    covid_data$total_cases[covid_data$country == c &
+                             covid_data$date == de]
+  if (ds != '2020-01-01' & tcs > 1000 & !is_empty(tce)) {
+    stay_home.dates[i, 6] <- (tce - tcs) / tcs
+  } else{
+    stay_home.dates[i, 6] <- 0
+  }
+}
+
+rm('c', 'de', 'ds', 'tcs', 'tce', 'i')
+
+
+stay_home.dates <- stay_home.dates %>%
+  group_by(country) %>%
+  summarise(changes = n(),.groups="drop") %>%
+  inner_join(stay_home.dates,by='country')
+
+```
+  
+  We will use the two clusters again, group 1 and group 2, where the first one represents countries with a high level of democracy, while the second one shows the low ones.
+
+In the following graph, the colors show the strictness of the restriction "Stay-at-home", with intensity from 0 to 3.
+
+```{r}
+#graph 13
+
+stay_home.dates %>%
+  transform(country = factor(country, levels = countries.top.dem)) %>%
+  arrange(country) %>%
+  ggplot() +
+  geom_rect(
+    aes(
+      xmin = date_start,
+      xmax = date_end,
+      ymin = lv - 0.4,
+      ymax = lv + 0.4,
+      color = as.factor(lv),
+      fill = as.factor(lv)
+    ),
+    alpha = 0.5
+  ) +
+  ylim(c(-0.5, 3.5)) +
+  scale_fill_manual(
+    name = "Levels",
+    labels = c(
+      '3' = '3 - Require with minimal exceptions',
+      '2' = '2 - Require with exceptions',
+      '1' = '1 - Recommend',
+      '0' = '0 - No restriction'
+    ),
+    values = c(
+      "3" = "#FF0000",
+      "2" = "#FF8C00",
+      "1" = "#FFD700",
+      "0" = "#228B22"
+    )
+  ) +
+  scale_color_manual(
+    name = "Levels",
+    labels = c(
+      '3' = '3 - Require with minimal exceptions',
+      '2' = '2 - Require with exceptions',
+      '1' = '1 - Recommend',
+      '0' = '0 - No restriction'
+    ),
+    values = c(
+      "3" = "#FF0000",
+      "2" = "#FF8C00",
+      "1" = "#FFD700",
+      "0" = "#228B22"
+    )
+  )  +
+  theme(legend.position = "bottom")+
+  facet_wrap(~ country, scale = 'fixed')
+```
+
+First of all, we notice that democratic countries never reached the highest level of restriction where people are not allowed to go out at all, with some minor exceptions. On the other hand, 40% of the authoritarian countries imposed such measures.
+
+Also, we can see that Belgium, Portugal, Spain and Ireland have been quite shaky with applying such a policy, which means that they are frequently changing their strategy. At the same time, we can see similar behavior in Romania and Moldova, probably stemming from the fact that they are the only countries in group 2 to have a similar liberal democracy level.
+One reason for such fluctuation on restriction level is that democratic countries are hesitant in imposing the maximum stringency to stay at home, fearing the possibility of its citizens protesting.
+
+However, we see that the rest of the countries in group 1, apart from Estonia, never reached level two either. This holds true even when they were facing a steep increase in the number of cases.
+
+On the other hand, in group 2, we observe more stability on the restriction applied. The only countries who applied the maximum restriction for stay at home are Russia, Serbia, Bosnia and Kosovo. Looking at the cases graph, we see that the situation in those countries was not far from the average, and in term of mortality rate, they were the countries with the lowest numbers. 
+
+Overall, countries with a higher level of democracy seem to face more instability in applying the stay at home restriction, more precisely, they never managed to apply it at the full regime. In contrast, low democratic countries have been able to confine people at home during the peak of the emergency (March to June), even if indicators were showing a more favorable situation.
+
+```{r}
+stay_home.dates.lvlength <- stay_home.dates %>%
+  select(country, lv, length.class) %>%
+  pivot_wider(
+    id_cols = lv,
+    names_from = country,
+    values_from = length.class,
+    values_fn = sum
+  ) %>%
+  replace(is.na(.), 0) %>%
+  pivot_longer(!lv, names_to = 'country', values_to = 'value') %>%
+  pivot_wider(id_cols = country,
+              names_from = lv,
+              values_from = value)
+
+stay_home.dates.lvlength <-
+  stay_home.dates %>%
+  group_by(country) %>%
+  summarise(changes = mean(changes)-1, .groups = "drop") %>%
+  inner_join(stay_home.dates.lvlength, by = 'country') %>%
+  mutate(country=factor(country,levels=dem.tophighlow.lib$country)) %>%
+  select(country, changes, '0', '1', '2', '3') %>%
+  arrange(order(levels(country)))
+```  
+
+```{r}
+
+t1 <- kable(stay_home.dates.lvlength[1:10,],align = c('l','c','c','c','c','c')) %>%
+  kable_classic(full_width = T, html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'))%>%
+  column_spec(1, width = "4.5cm")
+t2 <- kable(stay_home.dates.lvlength[11:20,],align = c('l','c','c','c','c','c')) %>%
+  kable_classic(full_width = T, html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'))%>%
+  column_spec(1, width = "4.5cm")
+
+kables(list(t1,'',t2),caption = "**Table 13**: Stay home restriction - Total restriction length in days and number of changes in restriction policy") %>%
+  kable_classic(full_width = T, html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'))
+
+```
+  
+    
+  **PUBLIC GATHERING**
+```{r}
+public_gather.top <- public_gather %>%
+  select(date, all_of(countries.top.dem))
+
+public_gather.dates <- count.leveldays(public_gather.top) %>%
+  filter(date_start <= as.Date('2020-11-04')) %>%
+  mutate(
+    date_end = replace(
+      date_end,
+      date_end > as.Date('2020-11-04'),
+      as.Date('2020-11-05')
+    ),
+    length.class = as.numeric(date_end - date_start)
+  )
+
+public_gather.dates <- public_gather.dates %>%
+  group_by(country) %>%
+  summarise(changes = n(),.groups="drop") %>%
+  inner_join(public_gather.dates,by='country')
+
+```
+
+```{r}
+#graph 14
+
+public_gather.dates %>%
+  transform(country = factor(country, levels = countries.top.dem)) %>%
+  arrange(country) %>%
+  ggplot() +
+  geom_rect(
+    aes(
+      xmin = date_start,
+      xmax = date_end,
+      ymin = lv - 0.4,
+      ymax = lv + 0.4,
+      color = as.factor(lv),
+      fill = as.factor(lv)
+    ),
+    alpha = 0.5
+  ) +
+  ylim(c(-0.5, 4.5)) +
+  scale_fill_manual(
+    name = "Levels",
+    labels = c(
+      '4' = '4 - Below 10',
+      '3' = '3 - 10-100',
+      '2' = '2 - 100-1000',
+      '1' = '1 - Above 1000',
+      '0' = '0 - No restriction'
+    ),
+    values = c(
+      "4" = "#FF0000",
+      "3" = "#FF8C00",
+      "2" = "#FFD700",
+      "1" = "olivedrab",
+      "0" = "#228B22"
+    )
+  ) +
+  scale_color_manual(
+    name = "Levels",
+    labels = c(
+      '4' = '4 - Below 10',
+      '3' = '3 - 10-100',
+      '2' = '2 - 100-1000',
+      '1' = '1 - Above 1000',
+      '0' = '0 - No restriction'
+    ),
+    values = c(
+      "4" = "#FF0000",
+      "3" = "#FF8C00",
+      "2" = "#FFD700",
+      "1" = "olivedrab",
+      "0" = "#228B22"
+    )
+  ) +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ country, scale = 'fixed')
+```  
+
+  In both groups, it can be seen a reasonable level of stringency for public gathering restriction; however, this measure can be easier to apply since it does not affect the citizens' will to move, but it impose a limit on social relations. This restriction shows some differences with other measures as countries started becoming very strict between March and May and, on average, the limit on public gathering stayed under 100 people almost everywhere until now, whereas, for other restrictions, we have observed that they have been eased during summer.
+
+Sweden is the only democratic country which decided not to impose a limit below 10 people, while all the others did. 
+Again, we have a similar behavior between Belgium, Spain and Portugal. Since March, the limit on public gathering has always been at his maximum in those countries, except during summer, when it has been raised to 10-100 people.
+
+On the other hand, autocratic countries are showing a very similar pattern to the democratic ones. They have also imposed the highest level of measure. Only Hungary and Belarus stayed below the average. The latter, never imposed limitation on people movement, showing level 0 in both, stay at home and public gathering restriction.
+
+For what we see, most of the countries, regardless of their level of democracy, have applied "Public Gathering Policy" since the beginning of the emergency. As a result, we can not observe any link between the level of democracy and public gathering policy.
+  
+    
+### HEALTH CARE POLICIES  
+  
+  Another question we are trying to answer is how different testing policies and contact tracing are between countries with different level of democracy.
+
+We expect democratic countries to show an higher level of control over the spread of the virus.
+  
+  **TESTING POLICY**
+    
+    As we mentioned in the Introduction, several research papers state that highly democratic countries are better with dealing crisis than less democratic countries since the better governments treat their employers, citizens, the longer they will stays. 
+
+For this reason, we expect countries in group 1 (high democracy) to care more about people health, using testing and contact tracing activities in larger scale compared to countries with a lower level of democracy.
+  
+```{r}
+
+testing.top <- testing %>%
+  select(date, all_of(countries.top.dem))
+
+testing.dates <- count.leveldays(testing.top) %>%
+  filter(date_start <= as.Date('2020-11-04')) %>%
+  mutate(
+    date_end = replace(
+      date_end,
+      date_end > as.Date('2020-11-04'),
+      as.Date('2020-11-05')
+    ),
+    length.class = as.numeric(date_end - date_start)
+  )
+
+testing.dates <- testing.dates %>%
+  group_by(country) %>%
+  summarise(changes = n(), .groups = "drop") %>%
+  inner_join(testing.dates,by='country')
+
+
+```
+
+```{r}
+#graph 15
+
+testing.dates %>%
+  transform(country = factor(country, levels = countries.top.dem)) %>%
+  arrange(country) %>%
+  ggplot() +
+  geom_rect(
+    aes(
+      xmin = date_start,
+      xmax = date_end,
+      ymin = lv - 0.4,
+      ymax = lv + 0.4,
+      color = as.factor(lv),
+      fill = as.factor(lv)
+    ),
+    alpha = 0.5
+  ) +
+  ylim(c(-0.5, 3.5)) +
+  scale_fill_manual(
+    name = "Levels",
+    labels = c(
+      '3' = '3 - Open public testing',
+      '2' = '2 - Only with symptoms',
+      '1' = '1 - With symptoms and specific criteria',
+      '0' = '0 - No testing policy'
+    ),
+    values = c(
+      "3" = "#FF0000",
+      "2" = "#FF8C00",
+      "1" = "#FFD700",
+      "0" = "#228B22"
+    )
+  ) +
+  scale_color_manual(
+    name = "Levels",
+    labels = c(
+      '3' = '3 - Open public testing',
+      '2' = '2 - Only with symptoms',
+      '1' = '1 - With symptoms and specific criteria',
+      '0' = '0 - No testing policy'
+    ),
+    values = c(
+      "3" = "#FF0000",
+      "2" = "#FF8C00",
+      "1" = "#FFD700",
+      "0" = "#228B22"
+    )
+  ) +
+  theme(legend.position = "bottom")+
+  facet_wrap(~ country, scale = 'fixed')
+
+```
+  
+  Looking at the graph, overall, we see that all countries followed an increasing trend, since the early stage of the pandemic. However, covid tests are rarely open to the public. 
+
+The majority of democratic countries allow people to get tested whenever they show symptoms. The only two countries who are now allowing open test are Denmark and Portugal while Switzerland did it only from June to September. We assume that they decided to do so because, during summer, many people were going on holiday and, to prevent an import of the virus from outside the countries, they allowed everyone to get tested. 
+
+On the other hand, less democratic countries follow a very similar trend as democratic ones. Kosovo is the only country which allows people to get tested only with symptoms and specific criteria. 
+Another information that strikes us is Belarus. As we mentioned before, it never applied any movement restriction but, in term of the testing policy, together with Russia, Serbia and Ukraine, followed an open public testing policy. Belarus and Russia started using this strategy since the beginning of the pandemic while, Ukraine has slowly eased the criteria for testing over the year and reached open public test after summer.
+
+```{r,out.width= "48%", out.extra='style="float:right; padding:10px"'}
+data.serbia <- testing.dates %>% filter(country=='Serbia',lv==3)
+covid_data %>% filter (date > as.Date('2020-05-01') & date < as.Date('2020-09-01' ),country=='Serbia') %>%
+  ggplot()+
+  geom_line(aes(x=date,y=new_cases))+
+  xlab("Date")+
+  ylab("New cases")+
+  geom_rect(aes(xmin= date_start, xmax = date_end),fill='#FF0000',
+            ymin = -Inf, ymax = Inf,alpha = 0.3,
+            data = data.serbia)
+```
+  
+  Differently, Serbia faced a high increase in new cases from June to August and for this reason, they allowed everyone to get tested even without symptoms. Nevertheless, in July, they decided to stop, and they went back to level 1, where people are allowed to get tested only with symptoms and specific criteria, even though they were still registering an increase in new cases.
+
+
+As for public gathering, we can not assume a positive relation between countries level of democracy and their testing policy. Therefore, we will continue with our analysis, interrogating our data about differences that might raise between democratic and non-democratic counties in term of contact tracing policy.
+
+  
+    
+    
+**CONTACT TRACING**
+
+```{r}
+
+ctracing.top <- contact_tracing %>%
+  select(date, all_of(countries.top.dem))
+
+ctracing.dates <- count.leveldays(ctracing.top) %>%
+  filter(date_start <= as.Date('2020-11-04')) %>%
+  mutate(
+    date_end = replace(
+      date_end,
+      date_end > as.Date('2020-11-04'),
+      as.Date('2020-11-05')
+    ),
+    length.class = as.numeric(date_end - date_start)
+  )
+
+ctracing.dates <- ctracing.dates %>%
+  group_by(country) %>%
+  summarise(changes = n(), .groups = "drop") %>%
+  inner_join(ctracing.dates,by='country')
+
+```
+
+```{r}
+#graph 16
+
+ctracing.dates %>%
+  transform(country = factor(country, levels = countries.top.dem)) %>%
+  arrange(country) %>%
+  ggplot() +
+  geom_rect(
+    aes(
+      xmin = date_start,
+      xmax = date_end,
+      ymin = lv - 0.4,
+      ymax = lv + 0.4,
+      color = as.factor(lv),
+      fill = as.factor(lv)
+    ),
+    alpha = 0.5
+  ) +
+  ylim(c(-0.5, 2.5)) +
+  scale_fill_manual(
+    name = "Levels",
+    labels = c('2' = '2 - Done for all cases',
+               '1' = '1 - Not done for all cases',
+               '0' = '0 - No contact tracing'),
+    values = c("2" = "#FF0000",
+               "1" = "#FFD700",
+               "0" = "#228B22")
+  ) +
+  scale_color_manual(
+    name = "Levels",
+    labels = c('2' = '2 - Done for all cases',
+               '1' = '1 - Not done for all cases',
+               '0' = '0 - No contact tracing'),
+    values = c("2" = "#FF0000",
+               "1" = "#FFD700",
+               "0" = "#228B22")
+  ) +
+  theme(legend.position = "bottom")+
+  facet_wrap(~ country, scale = 'fixed')
+```
+  
+  The first information we get from the graph is that countries with a democracy level lower than 0.4 (Bosnia excluded), started on average, to apply contact tracing, for all cases, since April. In this group, the only countries who did not are Bosnia, Kosovo and Romania. The first never practiced such activity while the other two have been doing it only for some cases. Finally, Romania started tracing back the infection recently.
+  
+```{r,out.width= "60%", out.extra='style="float:right; padding:10px"',fig.asp=0.5}
+density.pop.top <- RAW.covid %>% 
+  filter(location %in% dem.tophighlow.lib$country) %>% 
+  select(date,location,population_density) %>% 
+  group_by(location) %>% 
+  summarise(pop.den=mean(population_density),.groups='drop') %>% 
+  mutate(location=reorder(location,pop.den))
+
+density.pop.top %>% ggplot(aes(x=pop.den,y=location)) +
+  geom_bar(stat='identity',fill="#FFD700",color="#FFD700",alpha=0.5)+
+  geom_text(aes(label=round(pop.den)),hjust=1,color='#228B22')+
+  xlab("Population density")+
+  ylab("")
+```
+
+In contrast, in the first group, we see a dominance of level 1 over the whole period. We immediately thought about the difficulty incurred in countries where population density is high. Indeed, it is harder to trace back someone’s movements in such countries. At the same time, looking at the population density for those countries, we see that Belgium and Switzerland are the ones with the highest; however, they are now applying contact tracing for all cases.
+
+Finally, we also see that low democratic countries show more stability in this activity, and they never downgraded their strategy. 
+On the other hand, similarly to stay at home restriction, countries in group 1 are showing more variability on whether doing the contact tracing for all cases or only for some of them.
+
+Overall, we can affirm that countries with a low level of democracy are more inclined to engage in contact tracing. This result appears to be in contrast with our initial expectations.
+
+
+
+
+
+
+
+
+
+

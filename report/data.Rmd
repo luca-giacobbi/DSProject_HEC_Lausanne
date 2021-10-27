@@ -1,0 +1,363 @@
+# Data
+
+```{r, echo = FALSE, message = FALSE}
+source(here::here("scripts/setup.R"))
+```
+
+For our research, we are going to use seven different datasets.
+
+## Covid data
+
+
+The first is the dataset with information related to covid.  We downloaded it from the portal https://ourworldindata.org. 
+It is composed of many information related to covid for almost all countries in the world. The available observations go from "2019-12-31" to "2020-11-07", and we have information about: 
+
+```{r}
+RAW.covid <- read.csv(here::here("data/owid-covid-data.csv"))
+```
+
+```{r}
+v <- matrix(c(names(RAW.covid),'',''),ncol = 3) 
+kbl(v,caption = "**Table 1**: `covid_data`, list of variables availabe in our dataset.") %>%
+  kable_classic(full_width = T, html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'))
+rm(v)
+```
+
+
+Now, we do not need all of those variables For this reason, we are going to select only those we consider useful to make a comparison of the pandemic situation in terms of cases and deaths.
+
+- date;
+- continent;
+- location;
+- total_cases;
+- new_cases;
+- total_deaths;
+- new_deaths;
+- population;
+
+First, the variable `location` indicates the name of the country. As there is a function called `location ()` , to avoid possible errors, we prefer to rename this variable `country`. Secondly, in our project, we are focusing our attention on European countries, and for this reason, we want to remove all countries that are part of other continents. 
+
+
+```{r}
+covid_data <- RAW.covid %>% 
+  mutate(date=as.Date(date))%>%
+  rename('country'=location) %>% 
+  filter(continent=='Europe') %>%
+  select(date,country,new_cases,total_cases,new_deaths,total_deaths,population)
+```
+
+
+```{r}
+c <- data.frame(matrix(c(unique(covid_data$country),""),ncol=4))
+names(c) <- c("","","","")
+kbl(c,
+    caption = "**Table 2**: European countries.",
+    align = c('cccccc')) %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>%
+   kable_styling(bootstrap_options = c('striped', 'hover', 'condensed')) 
+rm(c)
+```
+
+
+### Democracy index
+
+The second dataset is the democracy index dataset. 
+
+```{r}
+democracy <- read.csv(here::here("data/DEMOCRACY_LEVEL.csv"))
+```
+
+Our data come from V-DEM ( Varieties of Democracy) website, https://www.v-dem.net/en/data/data/v-dem-dataset/. V-Dem Institute is part of the Department of Political Science at the University of Gothenburg, Sweden.
+  
+   There are many informations included in the dataset but, one more time, we are not going to use all of them. The original file was containing 1817 variables but we needed only 5 of them. 
+we decided to use only two indicators of democracy which are: liberal democracy index and electoral democracy index. Therefore, we reduced this dataset in excel and load in r only a part of it.
+  
+First, we will extracted the relevant information:
+
+-	Country;
+-	Date;
+-	Year;
+-	v2x_libdem (Liberal democracy index);
+-	v2x_polyarchy (Electoral democracy index);
+
+These democracy indexes assume a value from 0 to 1, where 0 represents the absence of democracy while 1 represents a full democracy. 
+One of the challenging parts of our work was to choose the appropriate variables to describe the level of democracy. Our choice derives from several existing scientific literature related to government policy and Covid-19 pandemic.
+
+Our limitation is that our data is not updated for the year 2020. We have information up to  31 December 2019, and for this reason, we have to assume that level of democracy did not change between the end of 2019 and first semester of 2020. 
+
+
+```{r}
+democracy <- democracy %>%
+  rename('country'='country_name') %>% 
+  filter(year == "2019") %>%
+  select(country,v2x_polyarchy,v2x_libdem) 
+ 
+
+kbl(democracy[1:5,],
+    caption = "**Table 3**^a^: `democracy` dataset ",
+    align = c('lccccccccccc')) %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>%
+   kable_styling(bootstrap_options = c('striped', 'hover', 'condensed')) %>%
+  add_footnote(
+      paste(
+         "Representation of the first 5 observation of the dataset. Total observations : ",
+         nrow(democracy)
+      )
+   )
+  
+```
+
+
+### Stringency index
+
+```{r}
+stringency <- read.csv(file = here::here("data/covid-stringency-index.csv"))
+```
+
+We retrieved this dataset from https://ourworldindata.org/policy-responses-covid. 
+
+The stringency index indicates the country's level of stringency in term of restrictions applied. The variables used to evaluate this information are:
+
+- school closures; 
+- workplace closures; 
+- cancellation of public events; 
+- restrictions on public gatherings; 
+- closures of public transport; 
+- stay-at-home requirements; 
+- public information campaigns; 
+- restrictions on internal movements;
+- international travel controls.
+
+The index, on any given day, is calculated as the mean score of the nine metrics, each taking a value between 0 and 100, where 0 represent no restrictions at all and 100 maximum level of stringency. The time frame for this information goes from 2020-01-01 to 2020-11-09.
+
+We are going to use this information to understand which countries are more severe and to evaluate their policy's consequences in term of people infected.
+
+The dataset has 4 variables: 
+
+- Entity;
+- Code;
+- Date;
+- Stringency Index;
+
+We want to have one variable for each country where each observation represents one date and the value the stringency level. The country code can be excluded, and we fill the missing values at the end of the data with the previous value.
+
+
+```{r}
+stringency <- stringency %>% rename('country' = Entity,'date'=Date) %>% 
+  mutate(date=as.Date(date))%>%
+  rename('stringency.index'=Stringency.Index..OxBSG.)
+
+stringency <- stringency%>%
+  subset(select = - Code)%>%
+  pivot_wider(names_from = country,
+              values_from = stringency.index) %>%
+  fill(everything()) #Replace NAs with the previous value
+  
+```
+
+```{r}
+kbl(tail(stringency[,1:5]),
+    caption = "**Table 4**^a^: tail of `stringency` dataset ",
+    align = c('lccccccccccc')) %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>%
+   kable_styling(bootstrap_options = c('striped', 'hover', 'condensed')) %>%
+  add_footnote(
+      paste(
+         "Representation of the last 6 observation and first 5 columns of the dataset. Total observations : ",
+         nrow(stringency), ". Total countries : ", (ncol(stringency)-1)
+      )
+   )
+```
+  
+
+### Testing policy
+It was downloaded from https://ourworldindata.org/policy-responses-covid. 
+
+```{r}
+testing <- read.csv(file = here::here("data/covid-19-testing-policy.csv")) 
+```
+
+
+This dataset show to what extent the testing policies are applied in different countries. The type of test considered is the PCR test which is used to directly detect the presence of an antigen, rather than the presence of the body’s immune response, or antibodies. 
+For this reason, we assume that there is no other available test than PCR, even if we know  that PCR is not the only way to trace the presence of the virus in a sample.
+
+Similarly to the stringency index, we have four variables:
+
+- Entity;
+- Code;
+- Date;
+- Testing_policy;
+
+In this case, the testing policy index is an integer between 0 and 3:
+
+0. No testing policy;
+1. Only those who both (a) have symptoms AND (b) meet specific criteria (e.g. key workers, admitted to hospital, came into contact with a known case, returned from overseas);
+2. Testing of anyone showing COVID-19 symptoms;
+3. Open public testing (e.g. “drive-through” testing available to asymptomatic people);
+
+As we did before, we are going to organize our data such that we want one variable for each country and one observation for each date and all NAs replaced with the previous value.
+
+```{r}
+testing <- testing %>% rename('country' = Entity) %>%
+  mutate(date=as.Date(Date))%>%
+  select(date,country,testing_policy) 
+
+testing <- testing %>%
+  pivot_wider(names_from = country, 
+              values_from = testing_policy)%>%
+  fill(everything()) #Replace NAs with the previous value
+```
+
+```{r}
+kbl(tail(testing[,1:5]),
+    caption = "**Table 5**^a^: tail of `testing` dataset ",
+    align = c('lccccccccccc')) %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>%
+   kable_styling(bootstrap_options = c('striped', 'hover', 'responsive', 'condensed')) %>%
+  add_footnote(
+      paste(
+         "Representation of the last 6 observation and first 5 columns of the dataset. Total observations : ",
+         nrow(testing), ". Total countries : ", (ncol(testing)-1)
+      )
+   )
+```
+
+
+### Contact tracing policy
+It was downloaded from https://ourworldindata.org/policy-responses-covid. 
+
+```{r}
+contact_tracing <- read.csv(file = here::here("data/covid-contact-tracing.csv")) 
+```
+
+This information indicates whether a country applies policies to trace back the infection 
+The variable here still the same as in the previous two datasets and the value indicate:
+
+0. No contact tracing;
+1. Limited contact tracing - not done for all cases;
+2. Comprehensive contact tracing - done for all cases;
+
+We want to have this information in the same format as the previous one.
+
+```{r}
+contact_tracing <- contact_tracing %>% rename('country' = Entity) %>%
+  mutate(date=as.Date(Date)) %>%
+  select(date,country,contact_tracing) 
+
+contact_tracing <- contact_tracing %>%
+  pivot_wider(names_from = country, 
+              values_from = contact_tracing) %>%
+  fill(everything()) #Replace NAs with the previous value
+```
+
+```{r}
+kbl(tail(contact_tracing[,1:5]),
+    caption = "**Table 6**^a^: tail of `contact_tracing` dataset ",
+    align = c('lccccccccccc')) %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>%
+   kable_styling(bootstrap_options = c('striped', 'hover', 'responsive', 'condensed')) %>%
+  add_footnote(
+      paste(
+         "Representation of the last 6 observation and first 5 columns of the dataset. Total observations : ",
+         nrow(contact_tracing), ". Total countries : ", (ncol(contact_tracing)-1)
+      )
+   )
+```
+  
+Contract tracing and testing policy are going to tell us how different countries have supported the right to health. 
+We consider an equitable access for testing and contact tracing policy for all people. These are supposed to be the two most important rights that governments should ensure in order to be considered as democratic. For this reason, we want to analyze those elements with the level of democracy to identify the countries that are working the most in this direction and compare those results with the evolution of the infection in such country.
+
+
+### Stay-at-home and public gathering restriction
+It was downloaded from https://ourworldindata.org/policy-responses-covid. 
+
+Another useful information to answer our questions is 'Stay-at-home and public gathering restrictions.
+Both of them indicate to what extent the government is strict in term of the restrictions.
+
+**Stay-at-home** restriction is represented with a value between 0 and 3:
+
+0. No measures;
+1. Recommend not leaving the house;
+2. Require not leaving the house with exceptions for daily exercise, grocery shopping, and ‘essential’ trips;
+3. Require not leaving the house with minimal exceptions (e.g. allowed to leave only once every few days, or only one person can leave at a time);
+
+```{r}
+stay_home <- read.csv(file = here::here("data/stay-at-home-covid.csv")) 
+```
+
+```{r}
+stay_home <- stay_home %>% rename('country' = Entity,'level'=stay_home_requirements) %>%
+  mutate(date=as.Date(Date)) %>%
+  select(date,country,level) 
+
+stay_home <- stay_home%>% 
+  pivot_wider(names_from = country, 
+              values_from = level)%>%
+  fill(everything()) #Replace NAs with the previous value
+
+```
+
+And, **public gathering** restriction information goes from 0 to 4:
+
+0. No restrictions;
+1. Restrictions on huge gatherings (the limit is above 1000 people);
+2. Restrictions on gatherings between 100-1000 people;
+3. Restrictions on gatherings between 10-100 people;
+4. Restrictions on gatherings of less than ten people;
+
+We are going to use this data to see how countries with different intensity of democracy have restricted the freedom of movement.
+To do that, we decided to organize the last two datasets in the same structure of the others: one observation for each date where each variable identify one country.
+
+
+```{r}
+public_gather <- read.csv(file = here::here("data/public-gathering-rules-covid.csv")) 
+```
+
+```{r}
+public_gather <- public_gather %>% rename('country' = Entity,'level'=Restrictions.on.gatherings..OxBSG.)  %>%
+  mutate(date=as.Date(Date)) %>%
+  select(date,country,level) 
+
+public_gather <- public_gather%>% 
+  pivot_wider(names_from = country, 
+              values_from = level)%>%
+  fill(everything()) #Replace NAs with the previous value
+```
+
+```{r}
+kbl(tail(stay_home[,1:5]),
+    caption = "**Table 7**^a^: tail of `stay_home` dataset ",
+    align = c('lccccccccccc')) %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>%
+   kable_styling(bootstrap_options = c('striped', 'hover', 'condensed')) %>%
+  add_footnote(
+      paste(
+         "Representation of the last 6 observation and first 5 columns of the dataset. Total observations : ",
+         nrow(stay_home), ". Total countries : ", (ncol(stay_home)-1)
+      )
+   )
+```
+
+```{r}
+kbl(tail(public_gather[,1:5]),
+    caption = "**Table 8**^a^: tail of `public_gather` dataset ",
+    align = c('lccccccccccc')) %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>%
+   kable_styling(bootstrap_options = c('striped', 'hover', 'condensed')) %>%
+  add_footnote(
+      paste(
+         "Representation of the last 6 observation and first 5 columns of the dataset. Total observations : ",
+         nrow(public_gather), ". Total countries : ", (ncol(public_gather)-1)
+      )
+   )
+```
+
+
+
+
+
+
+
+
+

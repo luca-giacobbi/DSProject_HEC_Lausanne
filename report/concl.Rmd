@@ -1,0 +1,32 @@
+# Conclusion
+
+```{r, echo = FALSE, message = FALSE}
+source(here::here("scripts/setup.R"))
+```
+
+No country would have ever expected this situation to last that long. After one year, we can say that many countries are sharing similar responses to the emergency, applying similar restriction aimed to reduce the spread of the virus. 
+Therefore, with this paper, we aimed to provide a definite answer about whether democracy is the best regime to deal with crises. 
+
+In Europe, we observed that countries with a higher level of democracy are less strict in applying restrictions. We came up with our assumption: in countries where democracy level is high, it is more difficult to apply restrictions because their citizens are used to be more involved in governing the country. However, the authorities, being in a state of emergency, need to act promptly with restrictions that limit people freedom. As those decisions did not come from the people, even if it **is for the people**, it creates popular discontent. 
+
+We started analyzing the difference in the mortality rate in Europe. We saw that democratic countries have been having higher rates of fatality but, at the same time, the ones showing the lowest rates are included in the high democracy group too. Hence, we have not seen any correlation between government regime and mortality rate. 
+
+Secondly, we decided to check which of the two groups of countries have been, and are, more strict in term of movement restrictions. Low democratic regions seem to be more stable when applying such measures, confirming our theory that in democratic countries, it is harder to limit people's freedom to move. On the other hand, for public gathering, the two clusters have shown very similar results.
+
+We moved then to the analysis of two health policies applied by all the countries analyzed. Low democratic countries are more strict in term of contact tracing. Despite that, through the analysis of testing policies, we can confirm the main findings of the paper called "Democracy, Authoritarianism, and COVID-19 Pandemic Management: The Case of SARS-CoV-2 Testing" written by German Petersen. It is observed no clear relationship between countries democracy level and their testing policy. 
+
+
+### Limitation
+
+To improve the quality of our research, we should increase the sample of countries. However, the main reason we focused only on Europe countries is that they show a very similar pattern in many aspects. That allowed us to evaluate countries stringency measures and its level of democracy, making the famous assumption "ceteris paribus", meaning "all else being equal". Our results hold only when this hypothesis is highlighted. However, we are aware that this assumption is extreme. In order to ensure reliable results, the analysis should include more variables.
+  
+  
+### Future work
+
+High democracy level does not mean that citizens have full trust in the government. According to the article published by "CEIP", a global think tank, Many European democracies have faced declining trust since the economic crisis that took place in 2008. Spain, France, Italy and the UK are ranked particularly low. Furthermore, it is suggested that governments with high levels of trust can effectively maintain lockdowns. Trust enabled some countries to convince their citizens to allow mass testing and quarantine before the virus's effects were widely seen, allowing them to stop the spread early. 
+
+As future work, we will test the validity of this argument using corruption data, in order to identify the level of trust people have towards their representatives. The next question we will try to answer could be: "Do highly trusted governments face less difficulties in applying restrictions compared to less trusted ones?" 
+
+
+
+

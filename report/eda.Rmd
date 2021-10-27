@@ -1,0 +1,546 @@
+# Exploratory data analysis
+
+
+```{r, echo = FALSE, message = FALSE}
+source(here::here("scripts/setup.R"))
+```
+
+After loading our data, we realized that the combination of countries is not unique for all of them.
+
+For this reason, we need to define the list of countries common for all our data. We could do that using a joint function, but instead, we prefer to have the list of countries (`countries.list`) we are using, so  in case  we need more data, we have it ready to filter the new source for the countries selected.
+
+```{r}
+
+countries.list <- Reduce(intersect,
+                         list(
+                           names(stringency[, -1]),
+                           democracy$country,
+                           unique(covid_data$country),
+                           names(stay_home[, -1]),
+                           names(public_gather[, -1]),
+                           names(testing[, -1])
+                         ))
+
+```
+
+```{r}
+k <- matrix(countries.list, ncol = 2)
+kbl(k, caption = "**Table 9**: list of european countries common for all our data",
+    align = c('cc')) %>%
+  kable_classic(full_width = T, html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'))
+rm(k)
+```
+
+
+  
+  We now want to show some characteristic of those countries. From the map, we can explore them and have details about population, life expectancy, GDP per capita, median age and human development index. We will do that joining the dataset `Countries_lat_lon` to a new dataset containing the variables of interest previously named.
+
+We built `Countries_lat_lon` dataset copying the information from Dataset Publishing Language portal offered by Google:
+https://developers.google.com/public-data/docs/canonical/countries_csv
+We created then a csv file through excel, and we loaded it in r and filtered for the countries in `countries.list`. 
+  
+  
+
+```{r}
+eu.info <-
+  RAW.covid %>%           # data that I want to see in the chart
+  filter(location %in% countries.list,
+         date == "2020-11-05") %>%
+  select(
+    location,
+    date,
+    human_development_index,
+    life_expectancy,
+    gdp_per_capita,
+    median_age,
+    population
+  )
+
+Countries_lat_lon <-
+  read_csv(here::here("data/Countries_lat_lon.csv"))
+
+Countries_lat_lon <- Countries_lat_lon %>%
+  filter(country %in% countries.list) %>%
+  rename("location" = country)
+
+eu.info <- left_join(eu.info, Countries_lat_lon, by = "location")
+
+eu.info <- eu.info %>%
+  mutate(
+    popup_info = paste(
+      location,
+      "<br/>",
+      "Population :",
+      population,
+      "<br/>",
+      "Life expectancy :",
+      life_expectancy,
+      "<br/>",
+      "Gdp per capital :",
+      gdp_per_capita,
+      "<br/>",
+      "Median age :",
+      median_age,
+      "<br/>",
+      "Human Dev. Idx :",
+      human_development_index,
+      "<br/>"
+    )
+  )
+```
+
+```{r,fig.width=12, fig.height=8}
+#map1
+leaflet(width = "100%", height = "400") %>% addTiles() %>%
+  addCircleMarkers(
+    data = eu.info,
+    lat = ~ latitude,
+    lng = ~ longitude,
+    radius = 3,
+    popup = ~ popup_info
+  )
+```
+
+    
+      
+      
+  
+Now, we want to look for possible mistakes and error in our datasets.
+
+### covid_data
+  
+  
+```{r,fig.align='center'}
+summary(covid_data)
+```
+
+The first thing we notice are the numerous NAs presents in `new_cases` , `total_cases`, `new_deaths` and `total_deaths`. The second problem we retrieve from the summary is the negative values in the variables `new_cases` and `new_deaths`. We did some research and we found out that on those dates, a new system of gathering data had allowed them to identify cases that were counted twice and exclude deaths wrongly attributed to the virus. For this reason, we assume that on those dates, the new_cases and new_deaths are equal to 0.
+
+```{r}
+covid_data$new_cases <-
+  ifelse(covid_data$new_cases < 0, 0, covid_data$new_cases) #Replace negative values
+covid_data$new_deaths <-
+  ifelse(covid_data$new_deaths < 0, 0, covid_data$new_deaths) #Replace negative values
+```
+
+After replacing the negative values, we need to fix all NAs. For now, the dataset is structured in a way that we cannot identify which observation represents the last raw of a country and which one the first of the next one. **See table 10.** 
+To solve this problem, we are going to separate our four variables in four different datasets, and we will treat them separately. The reason why we are doing so is that `total_cases`and `total_deaths` are cumulative values and we want to replace NAs with the previous value plus new daily cases/deaths. If we do so, with the actual structure, we will end up assigning the last value of the last observation of a country (2020-11-07) to the first observation of the next country (2020-12-31). 
+
+```{r}
+covid_data %>% 
+  filter((date>='2020-11-05' & country == 'France')| (date <= '2020-01-02' & country=='Germany')) %>%
+  kbl( caption = "**Table 10**: Visualization of the problem we would have fixing `total_cases`and `total_deaths` from the actual dataset. ",align = c('l','l','c','c','c','c','c')) %>%
+  kable_classic(full_width = T, html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'))
+```
+
+The NAs in the variables `new_cases`and `new_deaths` can be replaced with 0. Doing so, we are assuming that no cases or deaths are registered on that date. 
+On the other hand, `total_cases`and `total_deaths` NAs seem to appear when the value does not change from the day before. For this reason, we will replace those missing values with the previous one, except for the first observation, which will be assigned the value 0.
+
+```{r}
+
+tot.cas <- covid_data %>% select(date,country,total_cases) %>%
+  pivot_wider(names_from = country,values_from=total_cases) %>%
+  arrange(date)
+
+tot.cas[1,][mapply(is.na,tot.cas[1,])] <- 0 #Replace first raw with 0
+tot.cas <- tot.cas%>% fill(everything()) #Fill all the NAs with the previous value
+
+tot.de <- covid_data %>% select(date,country,total_deaths) %>%
+  pivot_wider(names_from = country,values_from=total_deaths) %>%
+  arrange(date)
+
+tot.de[1,][mapply(is.na, tot.de[1,])] <- 0
+tot.de <- tot.de %>% fill(everything())
+
+new.cas <- covid_data %>% 
+  select(date,country,new_cases) %>%
+  pivot_wider(names_from = country,
+              values_from=new_cases) %>%
+  arrange(date)
+
+new.de <- covid_data%>%
+  select(date, country, new_deaths)%>%
+  pivot_wider(names_from = country,
+              values_from = new_deaths)%>%
+  arrange(date)
+
+new.cas[mapply(is.na, new.cas)] <- 0 #Replace all missing values with 0s
+new.de[mapply(is.na, new.de)] <- 0
+
+pop <- covid_data %>% select(date,country,population) %>%
+  pivot_wider(names_from = country,values_from=population) %>%
+  arrange(date)
+
+pop <- pop %>% fill(everything(),.direction = 'up')
+```
+
+```{r}
+#Put those four variables back together in the same dataset 
+
+new.cas <- new.cas %>%
+  pivot_longer(!date,names_to = 'country',values_to='new_cases') %>%
+  arrange(country)
+
+new.de <- new.de %>%
+  pivot_longer(!date,names_to = 'country',values_to='new_deaths') %>%
+  arrange(country)
+  
+tot.cas <- tot.cas %>%
+  pivot_longer(!date,names_to = 'country',values_to='total_cases') %>%
+  arrange(country)
+
+tot.de <- tot.de %>%
+  pivot_longer(!date,names_to = 'country',values_to='total_deaths') %>%
+  arrange(country)
+
+pop <- pop %>%
+  pivot_longer(!date, names_to = 'country', values_to = 'population') %>%
+  arrange(country)
+
+covid_data <- list(new.cas, new.de, tot.cas, tot.de, pop) %>%
+  reduce(inner_join, by = c("country", "date"))
+
+```
+
+```{r}
+rm(new.cas,new.de,pop,tot.cas,tot.de) # Remove data we will not use further
+```
+
+
+Now our dataset is clean and ready to use.
+
+We are going to create new variables that will be useful to evaluate the current situation in term of infection mortality.
+
+$$Mortality\ rate= ((total\_deaths/total\_cases) * 100)\\
+Cases\ per\ 100000\ people = (total\_cases/population)*100000\\
+Deaths\ per\ 100000\ people = (total\_deaths/population)*100000\\
+Daily\ cases\ growth = ((total\_cases_t - total\_cases_{t-1})/total\_cases_{t-1})*100\\
+Daily\ deaths\ growth =((total\_deaths_t - total\_deaths_{t-1})/total\_deaths_{t-1})*100$$
+
+One of the most harmful consequence of Covid-19 across the world is mortality rate. It indicates how many people, out of 100 people infected, die in a specific country because of the pandemic.
+The mortality rate can differ from one country to another. According to the scientific report "Explaining among country variation in Covid19 case fatality rate" published in "https://www.nature.com/articles/s41598-020-75848-2", differences in mortality rate can be caused by several factors: 
+
+Mortality tends to be more frequent in countries where the number of elderly people is higher. Related to that,  It is also possible to observe a positive correlation between people with a chronic respiratory disease, cancer and smoking rate in people over 70 years.
+
+Also GDP per capital and political regime are seen as an explicative factor to mortality such that higher GDP per capital and higher democracy level have a positive relation with the mortality rate.
+
+Some other external resources explain mortality differences among countries in different healtcare system.
+Countries with a high level of testing policy allows them to identify cases early and to take necessary measures for it.
+
+```{r,warning=FALSE,message=FALSE}
+# Spotted problem with last two observation in Belgium, Spain and Sweden. 
+covid_data <-
+  covid_data %>% filter(date != "2020-11-07", date != "2020-11-06")
+
+covid_data <- covid_data %>%
+  mutate(
+    cases_per100k = ifelse(total_cases != 0, (total_cases * 100000) / population, 0),
+    deaths_per100k = ifelse(total_deaths != 0, (total_deaths * 100000) /
+                              population, 0),
+    mort_rate = ifelse(total_deaths != 0, (total_deaths / total_cases) *
+                         100, 0),
+    cases_growth = if_else(lag(total_cases) != 0, ((
+      total_cases - lag(total_cases)
+    ) / lag(total_cases)) * 100, 0, 0),
+    deaths_growth = if_else(lag(total_deaths) != 0, ((
+      total_deaths - lag(total_deaths)
+    ) / lag(total_deaths)) * 100, 0, 0)
+  )
+
+covid_data$deaths_growth[covid_data$deaths_growth == (-100)] <- 0
+covid_data$cases_growth[covid_data$cases_growth == (-100)] <- 0
+
+covid_data[mapply(is.na, covid_data)] <- 0
+covid_data[mapply(is.infinite, covid_data)] <- 0
+```
+
+```{r,fig.align='center'}
+eu.mort <- covid_data %>% select(date, country,mort_rate) %>%
+  filter(country %in% countries.list)
+summary(eu.mort)
+```
+
+
+```{r}
+#MORTALITY RATE GRAPH
+
+#graph 1
+
+eu.mort %>% group_by(country) %>%
+  ggplot(aes(
+    x = date,
+    y = mort_rate,
+    col = country,
+    group = country
+  )) +
+  geom_line() +
+  gghighlight(max(mort_rate) >= 14.5 |
+                mean(mort_rate) < 1,  label_key = country, ) +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    hjust = 1,
+    vjust = 0.5
+  )) +
+  ggtitle("Mortality rate") +
+  xlab("Date") + ylab("Value")
+
+```
+
+As we can see from the graph, the mortality rate increased in every country from march. Italy, United Kingdom, Belgium and France have shown a mortality rate much higher than the average. In contrast, we see that countries like Iceland, Belarus and Slovakia have shown an average mortality rate lover than 1.
+In the analysis section we will analyze the reason of such difference, to understand if there is any correlation with the democracy level and the restriction applied.
+
+### Democracy index
+
+As the first thing, we can remove the variable `date` as we assumed that the democracy index is constant for the whole period. Then, we want to select only the countries related to our project. We do that filtering the dataset with our countries list.
+
+Let's have a look at the map to have a visualization of our data.
+
+```{r}
+democracy <- democracy  %>%
+  filter(country %in% countries.list)
+```
+
+```{r}
+#graph2
+
+plot.democracy <- ggplot(democracy,
+             aes(v2x_libdem, v2x_polyarchy, color = country)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0, 1) +
+  ylim(0, 1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    hjust = 1,
+    vjust = 0.5
+  )) +
+  ggtitle("Liberal democracy index VS electoral democracy index") +
+  xlab("Liberal") + ylab("Electoral") 
+ggplotly(plot.democracy,height = 600)
+```
+
+As it has been argued in the "Data" part, v2x_libdem represents "Liberal democracy index", and v2x_polyarchy represents "Electoral democracy index". From the graphs, we can identify 2 clusters of countries: the first is characterised by a liberal democracy above 0.7 and electoral democracy above 0.80, while the second cluster shows liberal democracy lower than 0.55 and the electoral one below 0.7. We can also observe that West Europe countries have a higher level of democracy compared to countries in East Europe. Scandinavian countries are the one showing the highest level of democracy.
+Finally, countries' electoral democracy index is always higher than its liberal democracy index. However, this small detail is negligible since the differences of values between them are minimal.
+
+### Stringency index
+
+The next dataset we are going to explore is the Stringency index. 
+
+```{r}
+stringency <- stringency %>%
+  pivot_longer(!date, names_to = 'country', values_to = 'stringency_idx') %>%
+  filter(country %in% countries.list)
+```
+
+
+```{r}
+stringency.serbia <- stringency %>% filter(country=='Serbia')
+stringency.belarus <-  stringency %>% filter(country=='Belarus')
+```
+
+```{r,warning=FALSE}
+#graph3
+
+stringency %>% ggplot(aes(
+  x = date,
+  y = stringency_idx,
+  group = country,
+  color = country
+)) +
+  geom_path() +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    hjust = 1,
+    vjust = 0.5
+  )) +
+  ggtitle("Stringency level for european countries") +
+  xlab("Date") + ylab("Stringency Index") +
+  gghighlight(
+    country %in% c('Italy', 'United Kingdom', 'Belgium', 'France') ,
+    unhighlighted_params = aes(color = 'light grey', size = 0.2) ,
+    label_key = country
+  )
+```
+
+  Here we isolated the countries that have been showing the highest mortality rate and we see that the level of stringency sharply increased in march but their path do not differ too much from the average level in Europe.
+
+```{r,warning=FALSE}
+#graph4
+
+stringency %>% ggplot(aes(
+  x = date,
+  y = stringency_idx,
+  group = country,
+  color = country
+)) +
+  geom_path() +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    hjust = 1,
+    vjust = 0.5
+  )) +
+  ggtitle("Stringency level for european countries") +
+  xlab("Date") + ylab("Stringency Index") +
+  gghighlight(
+    country %in% c('Serbia', 'Belarus') ,
+    unhighlighted_params = aes(color = 'light grey', size = 0.2) ,
+    label_key = country
+  )
+```
+  
+  Results for Serbia and Bealrus are quite suprising. The first is the only country who reached the maximum level of stringency (100). It stayed constant at its high level from march till the end of April, to drop then to 25 in the month of June.  On the other hand, the second one, Belarus, seems to not have applied restrictions as much as other countries. Looking at the previous graph *Liberal democracy index VS electoral democracy index*. This mean that there might be correlation between restrictions and democracy level.
+We will analyze those results more in detail in the next section.
+  
+  
+### Testing policy
+
+```{r,fig.width = 8, fig.height= 6, fig.align=6}
+#graph 5
+
+testing.long <- testing %>%
+  pivot_longer(!date, names_to = 'country', values_to = 'testing') %>%
+  filter(country %in% countries.list)
+
+ggplot(testing.long,
+       aes(y = testing, x = date)) +
+  geom_line(aes(color = country)) +
+  theme(legend.position = 'none',
+        axis.text.x = element_text(angle = 90)) +
+  facet_wrap(. ~ country) +
+  xlab("Date") + ylab("Restriction level")
+
+summary(testing.long$testing)
+
+```
+
+This graph shows countries testing strictness index for Covid-19. First of all, we observe that countries increase the strictness of their testing policy during the first wave. Now, even there is a bit decrease, we can see clearly that they keep a certain degree of that policy (with no "0" value). They are almost all in level 2, meaning that people, who demonstrate any of the Covid symptoms, is allowed to be tested. Only Bulgaria is in level 1 showing the lack of strictness compared to other countries. 
+  
+  An important information we want to get from this data set is: for how long each restriction level last in each country? How many time each country has changed restriction policy? To answer those question we built out own function `count.leveldays`
+  
+```{r}
+
+count.leveldays <- function(x) {
+  m <-
+    tibble(country = character(),
+           date_start = Date(),
+           lv = integer()
+    )
+  f <- 1
+  for (z in 2:ncol(x)) {
+    i <- pull(x[1, z])
+    m <- add_row(
+      m,
+      country = names(x[, z]),
+      date_start = pull(x[1, 1]) ,
+      lv = pull(x[1, z])
+    )
+    for (j in 2:nrow(x)) {
+      if (i == pull(x[j, z])) {
+        next
+      } else {
+        m[f, 4] <- i
+        f <- f + 1
+        i <- pull(x[j, z])
+        m <- add_row(
+          m,
+          country = names(x[, z]),
+          date_start = pull(x[j, 1]) ,
+          lv = i
+        )
+      }
+    }
+  }
+  
+  for (i in 1:(nrow(m) - 1)) {
+    if (m$country[i] == m$country[i + 1]) {
+      m[i, 5] <- pull(m[i + 1, 2])
+    } else {
+      (m$country[i] != m$country[i + 1])
+      m[i, 5] <-max(x$date) #take maximum date from source dataset
+    }
+  }
+  m[nrow(m), 5] <-max(x$date)
+  m <- m %>% 
+    rename(date_end=...5) %>%
+    select(country,lv,date_start,date_end)
+  return(m)
+}
+```
+
+### Contact tracing policy 
+
+```{r,fig.width = 8, fig.height= 6, fig.align=6}
+#graph6
+
+contact_tracing.long <- contact_tracing %>%
+  pivot_longer(!date, names_to = 'country', values_to = 'contact') %>%
+  filter(country %in% countries.list)
+
+ggplot(contact_tracing.long,
+       aes(y = contact, x = date)) +
+  geom_line(aes(color = country)) +
+  theme(legend.position = 'none',
+        axis.text.x = element_text(angle = 90)) +
+  facet_wrap(. ~ country) +
+  xlab("Date") + ylab("Restriction level")
+
+summary(contact_tracing.long$contact)
+
+```
+
+As indicated in the "data" part, contact tracing policy is simply the process of identification of people that a Covid patient has come in contact with. We were expecting to see a high level of control almost everywhere. However, we notice that not all of them did contact tracing. In Bosnia, for example, we can see that they never did, while Slovakia shows an opposite strategy. On average, the level is moderately high even if not constant during the period.
+
+  
+  
+### Stay at home
+
+```{r,fig.width = 8, fig.height= 6, fig.align=6}
+#graph7
+
+stay_home.long <- stay_home %>%
+  pivot_longer(!date, names_to = 'country', values_to = 'stay') %>%
+  filter(country %in% countries.list)
+
+ggplot(stay_home.long,
+       aes(y = stay, x = date)) +
+  geom_line(aes(color = country)) +
+  facet_wrap(. ~ country) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90)) +
+  xlab("Date") + ylab("Restriction level")
+
+
+summary(stay_home.long$stay)
+```
+
+This policy is probably the one applied less. We can see that the average is 0.71, that considering the scale goes from 0 to 3, it is a low average. Countries like Norway, Belarus, Iceland, Slovenia and more, have barely applied the stay home restriction. This is a piece of exciting information for our research because the order to stay home is probably the one that more goes against people freedom. We will see in the next section if there is any correlation with the level of democracy.
+  
+### Public gathering
+  
+```{r,fig.width = 8, fig.height= 6, fig.align=6}
+#graph8
+
+public_gather.long <- public_gather %>%
+  pivot_longer(!date, names_to = 'country', values_to = 'gather') %>%
+  filter(country %in% countries.list)
+
+ggplot(public_gather.long,
+       aes(y = gather, x = date)) +
+  geom_line(aes(color = country)) +
+  facet_wrap(. ~ country) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90)) +
+  xlab("Date") + ylab("Restriction level")
+
+summary(public_gather.long$gather)
+```
+
+This seems to be an interesting variable to analyze, and this will be very useful in our analysis to see how countries, with different democracy level, implement restrictions rules for gatherings. However, now, we should focus on descriptive analysis. All countries are quite strict for that policy. They show a pattern around 3 and 4, while Belarus is the only country that shows no stringency level. Although, Iceland had a no stringency level for "Stay at home policy", but for public gathering restrictions, it shows an index of 3, which is relatively high.
+
+
+
+
+
